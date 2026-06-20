@@ -78,7 +78,7 @@ The tutorial I started from hardcodes the token and reviews everything in one bl
 1. **Token in an env var, never in the file.** `os.environ["GITHUB_TOKEN"]`. A PAT pasted into source is one `git push` away from disaster.
 2. **Review only the patch, not the whole file.** Sending just the changed lines keeps the prompt small, so a 7B model stays fast and stays on-topic instead of re-reviewing untouched code.
 3. **One comment per file, not one giant dump.** Reviewing `auth.py` and `utils.py` in separate comments makes the feedback scannable. A 600-line wall of text gets ignored.
-4. **Dedupe already-reviewed PRs.** I keep a small local JSON of `pr_number` + commit SHA. If nothing changed since the last run, skip it. No spamming the same PR every time the script runs.
+4. **Resilient runs.** List endpoints are paginated (so it doesn't stop at the first 30 PRs or files), and each file's review is wrapped in error handling so one bad file logs and skips instead of aborting the whole run.
 
 ## Where it breaks
 
@@ -95,7 +95,7 @@ You don't need a cloud API to get useful code review from an LLM. A laptop, Olla
 
 It won't replace your senior engineer. But it'll save them from reviewing the typos — and it'll do it without your code ever leaving the building.
 
-*Built on the foundation of Aman Kharwal's tutorial, ["Build an AI Code Review Bot for GitHub"](https://amanxai.com/2026/03/18/build-an-ai-code-review-bot-for-github/). I adapted the architecture and extended it with env-based auth, patch-only review, per-file comments, and dedupe.*
+*Built on the foundation of Aman Kharwal's tutorial, ["Build an AI Code Review Bot for GitHub"](https://amanxai.com/2026/03/18/build-an-ai-code-review-bot-for-github/). I adapted the architecture and extended it with env-based auth, patch-only review, per-file comments, pagination, and per-file error isolation.*
 
 ### Sources
 - [Aman Kharwal — Build an AI Code Review Bot for GitHub](https://amanxai.com/2026/03/18/build-an-ai-code-review-bot-for-github/)

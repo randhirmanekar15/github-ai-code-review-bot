@@ -27,20 +27,30 @@ def _headers() -> dict[str, str]:
     }
 
 
+def _get_paginated(url: str) -> list[dict]:
+    """GET a GitHub list endpoint, following Link-header pagination."""
+    results: list[dict] = []
+    params = {"per_page": 100}
+    while url:
+        resp = requests.get(url, headers=_headers(), params=params, timeout=API_TIMEOUT)
+        resp.raise_for_status()
+        results.extend(resp.json())
+        url = resp.links.get("next", {}).get("url")
+        params = {}  # the "next" URL already carries the page cursor
+    return results
+
+
 def get_pull_requests(owner: str, repo: str) -> list[dict]:
-    """List open pull requests for a repo."""
-    url = f"https://api.github.com/repos/{owner}/{repo}/pulls"
-    resp = requests.get(url, headers=_headers(), timeout=API_TIMEOUT)
-    resp.raise_for_status()
-    return resp.json()
+    """List all open pull requests for a repo (paginated)."""
+    return _get_paginated(f"https://api.github.com/repos/{owner}/{repo}/pulls")
 
 
 def get_pr_files(owner: str, repo: str, pr_number: int) -> list[tuple[str, str]]:
-    """Return [(filename, patch)] for a PR — only the changed lines."""
-    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/files"
-    resp = requests.get(url, headers=_headers(), timeout=API_TIMEOUT)
-    resp.raise_for_status()
-    return [(f["filename"], f.get("patch", "")) for f in resp.json()]
+    """Return [(filename, patch)] for a PR — only the changed lines (paginated)."""
+    files = _get_paginated(
+        f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/files"
+    )
+    return [(f["filename"], f.get("patch", "")) for f in files]
 
 
 def build_review_prompt(filename: str, patch: str) -> str:
@@ -83,9 +93,13 @@ def review_repo(owner: str, repo: str) -> None:
         for filename, patch in get_pr_files(owner, repo, number):
             if not patch:
                 continue
-            review = analyze_code(filename, patch)
-            post_comment(owner, repo, number, format_comment(filename, review))
-            print(f"Reviewed PR #{number}: {filename}")
+            # Isolate per-file failures so one bad file doesn't abort the run.
+            try:
+                review = analyze_code(filename, patch)
+                post_comment(owner, repo, number, format_comment(filename, review))
+                print(f"Reviewed PR #{number}: {filename}")
+            except Exception as exc:  # noqa: BLE001  keep going on the next file
+                print(f"Skipped PR #{number} {filename}: {exc}")
 
 
 def main() -> None:
